@@ -10,13 +10,21 @@ def softmax(output):
     return np.exp(output) / np.sum(np.exp(output), axis = 1).reshape(output.shape[0], 1)
 
 class NeuralNetwork:
-    def __init__(self, epochs, learning_rate, num_of_layers):
+    def __init__(self, epochs, learning_rate, num_of_layers, train_x, train_y):
         self.epochs = epochs
         self.learning_rate = learning_rate
         self.input_size = 784
         self.output_size = 10
         self.num_of_layers = num_of_layers
         self.weights, self.biases = self.init_parameters()
+        self.z_values = []
+        self.h_values = []
+        self.y_hat = 0
+        self.dl_dz = {}
+        self.dl_dw = {}
+        self.dl_db = {}
+        self.train_x = train_x
+        self.train_y = train_y
 
     def init_parameters(self):
         weights = []
@@ -32,34 +40,57 @@ class NeuralNetwork:
 
         return weights, biases
 
-    def feedforward(self, train_x):
-        z_values = []
-        h_values = []
+    def feedforward(self, input_example):
         for layer in range(self.num_of_layers):
             if layer == 0:
-                z_values.append(train_x.dot(self.weights[layer]) + self.biases[layer])
-                h_values.append(sigmoid(z_values[layer]))
+                self.z_values.append(input_example.dot(self.weights[layer]) + self.biases[layer])
+                self.h_values.append(sigmoid(self.z_values[layer]))
             if layer == self.num_of_layers - 1:
-                z_values.append(h_values[layer-1].dot(self.weights[layer]))
-                h_values.append(softmax(z_values[layer]))
+                self.z_values.append(self.h_values[layer-1].dot(self.weights[layer]))
+                self.h_values.append(softmax(self.z_values[layer]))
             else:
-                z_values.append(h_values[layer-1].dot(self.weights[layer]))
-                h_values.append(sigmoid(z_values[layer]))
-        return h_values[self.num_of_layers - 1]
+                self.z_values.append(self.h_values[layer-1].dot(self.weights[layer]))
+                self.h_values.append(sigmoid(self.z_values[layer]))
+        self.y_hat = self.h_values[self.num_of_layers - 1].index(min(self.h_values[self.num_of_layers - 1]))
+        return self.y_hat
 
 
-    def backpropagation(self, train_y, y_hats, layer_id):
-        dl_dz = {}
-        dl_dw = {}
-        #for layer in range(self.num_of_layers - 1, -1, -1):
-        if layer_id == self.num_of_layers - 1:
-            dl_dz[layer] = y_hats - train_y
-            dl_dw[layer] = np.dot(dl_dz[layer], y_hats)
-            return self.backpropagation(train_y, y_hats, layer_id - 1)
-        else:
-            dl_dz[layer] =
+    def backpropagation(self, target):
+        for layer_id in range(self.num_of_layers-1, -1, -1):
+            if layer_id == self.num_of_layers - 1:
+                self.dl_dz[layer_id] = self.y_hat - target
+                self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.y_hat)
+            elif layer_id > 0:
+                self.dl_dz[layer_id] = np.dot(self.dl_dz[layer_id + 1], self.weights[layer_id+1]) * dsigmoid(self.z_values[layer_id])
+                self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.h_values[layer_id-1])
+            else:
+                self.dl_dz[layer_id] = np.dot(self.dl_dz[layer_id + 1], self.weights[layer_id+1]) * dsigmoid(self.z_values[layer_id])
+                self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.train_x)
+        self.dl_db = self.dl_dz
 
-        dl_db = dl_dz
+        for index, weight in enumerate(self.weights):
+            weight = weight - self.learning_rate * self.dl_dw[index]
+            self.weights[index] = weight
+
+    def shuffle(self):
+        index = [x for x in range(self.train_x.shape[0])]
+        np.random.shuffle(index)
+        self.train_x = self.train_x[index]
+        self.train_y = self.train_y[index]
+
+
+
+    def train(self):
+        for _ in range(self.epochs):
+            self.shuffle()
+            for input in self.train_x:
+                self.feedforward(input)
+                self.backpropagation()
+
+    def predict(self, test_x):
+        for example in test_x:
+            print(self.feedforward(example))
+
 
 
 
@@ -74,5 +105,6 @@ def receive_data(train_x, train_y, test_x):
 
 if __name__ == '__main__':
     train_x, train_y, test_x = receive_data(sys.argv[1], sys.argv[2], sys.argv[3])
-    network = NeuralNetwork(epochs=50, num_of_layers=3, learning_rate=5e-3)
-    network.backpropagation()
+    network = NeuralNetwork(epochs=50, num_of_layers=3, learning_rate=5e-3, train_x=train_x, train_y=train_y)
+    network.train()
+    network.predict(test_x)
