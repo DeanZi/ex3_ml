@@ -1,11 +1,11 @@
 import sys
 import numpy as np
+import random
 from scipy.special import expit
 
 
 sigmoid = lambda x: expit(x)#1 / (1 + np.exp(-x))
 dsigmoid = lambda x: sigmoid(x)*(1-sigmoid(x))
-#TODO : check correctness of softmax
 def softmax(output):
     output = output - np.max(output)
     return np.exp(output) / np.sum(np.exp(output))
@@ -31,32 +31,30 @@ class NeuralNetwork:
         biases = []
         for layer in range(self.num_of_layers):
             if layer == 0:
-                weights.append(np.random.randn(self.input_size, 150))
+                weights.append(np.random.randn(self.input_size, 150)*np.sqrt(2/150))
             elif layer == self.num_of_layers - 1:
-                weights.append(np.random.randn(weights[layer-1].shape[1], self.output_size))
+                weights.append(np.random.randn(weights[layer-1].shape[1], self.output_size)*np.sqrt(2/self.output_size))
             else:
-                weights.append(np.random.randn(weights[layer-1].shape[1], int(256/(2 * layer))))
-            biases.append(np.random.randn(weights[layer].shape[1]))
+                weights.append(np.random.randn(weights[layer-1].shape[1], int(256/(2 * layer)))*np.sqrt(2/int(256/(2 * layer))))
+            biases.append(np.random.randn(weights[layer].shape[1], 1))
 
         return weights, biases
 
     def feedforward(self, input_example):
         for layer in range(self.num_of_layers):
-            print(self.num_of_layers)
             if layer == 0:
-                self.z_values[layer] = input_example.dot(self.weights[layer]) + self.biases[layer]
+                self.z_values[layer] = np.dot(self.weights[layer].T, input_example) + self.biases[layer]
                 self.h_values[layer] = sigmoid(self.z_values[layer])
             elif layer == self.num_of_layers - 1:
-                self.z_values[layer] = np.dot(self.h_values[layer-1], self.weights[layer]) + self.biases[layer]
+                self.z_values[layer] = np.dot(self.weights[layer].T, self.h_values[layer-1]) + self.biases[layer]
                 self.h_values[layer] = softmax(self.z_values[layer])
-                print(len(self.h_values[layer]))
-            else:
-                self.z_values[layer] = np.dot(self.h_values[layer-1].T, self.weights[layer]) + self.biases[layer]
-                self.h_values[layer] = sigmoid(self.z_values[layer])
+            # else:
+            #     self.z_values[layer] = np.dot(self.h_values[layer-1].T, self.weights[layer]) + self.biases[layer]
+            #     self.h_values[layer] = sigmoid(self.z_values[layer])
         max_h_val = 0
         y_hat = -1
+        # print(self.h_values[self.num_of_layers - 1])
         for index, h_val in enumerate(self.h_values[self.num_of_layers - 1]):
-            # print(h_val.shape)
             if h_val > max_h_val:
                 max_h_val = h_val
                 y_hat = index
@@ -64,22 +62,20 @@ class NeuralNetwork:
 
 
     def backpropagation(self, target, input):
+        target = target.reshape(target.shape[0], 1)
         for layer_id in range(self.num_of_layers-1, -1, -1):
             if layer_id == self.num_of_layers - 1:
                 self.dl_dz[layer_id] = self.h_values[layer_id] - target
-                self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.h_values[layer_id])
-            elif layer_id > 0:
-                self.dl_dz[layer_id] = np.dot(self.weights[layer_id+1], self.dl_dz[layer_id + 1]) * dsigmoid(self.z_values[layer_id])
-                self.dl_dz[layer_id] = self.dl_dz[layer_id].reshape(self.dl_dz[layer_id].shape[0], 1)
-                old_h_values_shape = self.h_values[layer_id - 1].shape
-                self.h_values[layer_id - 1] = self.h_values[layer_id - 1].reshape(self.h_values[layer_id - 1].shape[0], 1)
-                self.dl_dw[layer_id] = np.dot(self.h_values[layer_id-1], self.dl_dz[layer_id].T)
+                self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.h_values[layer_id-1].T)
+
+            # elif layer_id > 0:
+            #     self.dl_dz[layer_id] = np.dot(self.weights[layer_id+1], self.dl_dz[layer_id + 1]) * dsigmoid(self.z_values[layer_id])
+            #     self.dl_dz[layer_id] = self.dl_dz[layer_id].reshape(self.dl_dz[layer_id].shape[0], 1)
+            #     self.h_values[layer_id - 1] = self.h_values[layer_id - 1].reshape(self.h_values[layer_id - 1].shape[0], 1)
+            #     self.dl_dw[layer_id] = np.dot(self.h_values[layer_id-1], self.dl_dz[layer_id].T)
             else:
-                self.dl_dz[layer_id] = np.dot(self.dl_dz[layer_id + 1].T, self.weights[layer_id+1].T) * dsigmoid(self.z_values[layer_id])
-                input = input.reshape(input.shape[0], 1)
-                self.dl_dz[layer_id] = self.dl_dz[layer_id].reshape(self.dl_dz[layer_id].shape[0], 1)
+                self.dl_dz[layer_id] = np.dot( self.weights[layer_id+1], self.dl_dz[layer_id + 1])*(dsigmoid(self.z_values[layer_id]))
                 self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], input.T)
-        self.h_values[layer_id - 1] = self.h_values[layer_id - 1].reshape(old_h_values_shape)
         self.dl_db = self.dl_dz
 
         for index, weight in enumerate(self.weights):
@@ -90,14 +86,13 @@ class NeuralNetwork:
             self.weights[index] = weight
 
         for index, bias in enumerate(self.biases):
-            bias = bias - self.learning_rate * self.dl_db[index].T
+            bias = bias - self.learning_rate * self.dl_db[index]
             self.biases[index] = bias
 
     def shuffle(self):
-        index = [x for x in range(self.train_x.shape[0])]
-        np.random.shuffle(index)
-        self.train_x = self.train_x[index]
-        self.train_y = self.train_y[index]
+        shuffled_data = list(zip(self.train_x, self.train_y))
+        random.Random(1).shuffle(shuffled_data)
+        self.train_x, self.train_y = zip(*shuffled_data)
 
 
 
@@ -107,10 +102,9 @@ class NeuralNetwork:
             self.shuffle()
             loss = 0
             for input, target in zip(self.train_x, self.train_y):
-                print("before")
+                input = input.reshape(input.shape[0], 1)
                 y_hat = self.feedforward(input)
-                print("after")
-                if y_hat != target:
+                if target[y_hat] != 1:
                     loss += 1
                 self.backpropagation(target, input)
             print("Loss is ", loss / len(self.train_x) * 100, '%')
@@ -118,6 +112,7 @@ class NeuralNetwork:
     def predict(self, test_x):
         results = []
         for example in test_x:
+            example = example.reshape(example.shape[0], 1)
             results.append(str(self.feedforward(example)))
         return results
 
@@ -129,9 +124,26 @@ def receive_data(train_x, train_y, test_x):
     return train_x, train_y, test_x
 
 
+def normalize_data(train_x, train_y):
+
+    def normalize(train_x):
+        train_x = train_x / 255
+        return train_x
+
+    def one_hot(train_y):
+        y_vectors = np.zeros((train_y.shape[0], 10))
+        for index in range(train_y.shape[0]):
+            y = int(train_y[index])
+            y_vectors[index][y] = 1
+        return y_vectors
+
+    return normalize(train_x), one_hot(train_y)
+
+
 if __name__ == '__main__':
     train_x, train_y, test_x = receive_data(sys.argv[1], sys.argv[2], sys.argv[3])
-    network = NeuralNetwork(epochs=20, num_of_layers=2, learning_rate=5e-3, train_x=train_x, train_y=train_y)
+    train_x, train_y = normalize_data(train_x, train_y)
+    network = NeuralNetwork(epochs=20, num_of_layers=2, learning_rate=0.02, train_x=train_x, train_y=train_y)
     network.train()
     output_file = open('test_y', 'w')
     test_y = network.predict(test_x)
