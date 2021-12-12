@@ -1,5 +1,7 @@
 import math
 import sys
+from datetime import datetime
+
 import numpy as np
 import random
 from scipy.special import expit
@@ -7,6 +9,10 @@ from scipy.special import expit
 sigmoid = lambda x: expit(x)
 dsigmoid = lambda x: sigmoid(x) * (1 - sigmoid(x))
 
+def relu(x):
+    return (x > 0) * x
+def drelu(x):
+    return x > 0
 
 def softmax(output):
     output = output - np.max(output)
@@ -36,8 +42,8 @@ class NeuralNetwork:
         for layer in range(self.num_of_layers):
             if self.num_of_layers == 1:
                 if normalize_weights:
-                    weights.append(np.random.randn(self.input_size, self.output_size) * np.sqrt(2 / self.output_size))
-                    biases.append(np.random.randn(weights[layer].shape[1], 1) * np.sqrt(2))
+                    weights.append(np.random.uniform(-1, 1, (self.input_size, self.output_size)))
+                    biases.append(np.random.uniform(-1, 1, (weights[layer].shape[1], 1)))
                 else:
                     weights.append(np.random.randn(self.input_size, self.output_size))
                     biases.append(np.random.randn(weights[layer].shape[1], 1))
@@ -45,23 +51,21 @@ class NeuralNetwork:
             else:
                 if layer == 0:
                     if normalize_weights:
-                        weights.append(np.random.randn(self.input_size, 180) * np.sqrt(2 / 180))
+                        weights.append(np.random.uniform(-1, 1, (self.input_size, 100)))
                     else:
-                        weights.append(np.random.randn(self.input_size, 180))
+                        weights.append(np.random.randn(self.input_size, 100))
                 elif layer == self.num_of_layers - 1:
                     if normalize_weights:
-                        weights.append(np.random.randn(weights[layer - 1].shape[1], self.output_size) * np.sqrt(
-                            2 / self.output_size))
+                        weights.append(np.random.uniform(-1, 1, (weights[layer - 1].shape[1], self.output_size)))
                     else:
                         weights.append(np.random.randn(weights[layer - 1].shape[1], self.output_size))
                 else:
                     if normalize_weights:
-                        weights.append(np.random.randn(weights[layer - 1].shape[1], 180) * np.sqrt(
-                            2 / 180))
+                        weights.append(np.random.uniform(-1, 1, (weights[layer - 1].shape[1], 100)))
                     else:
-                        weights.append(np.random.randn(weights[layer - 1].shape[1], 180))
+                        weights.append(np.random.randn(weights[layer - 1].shape[1], 100))
                 if normalize_weights:
-                    biases.append(np.random.randn(weights[layer].shape[1], 1) * np.sqrt(2))
+                    biases.append(np.random.uniform(-1, 1, (weights[layer].shape[1], 1)))
                 else:
                     biases.append(np.random.randn(weights[layer].shape[1], 1))
 
@@ -76,13 +80,13 @@ class NeuralNetwork:
             for layer in range(self.num_of_layers):
                 if layer == 0:
                     self.z_values[layer] = np.dot(self.weights[layer].T, input_example) + self.biases[layer]
-                    self.h_values[layer] = sigmoid(self.z_values[layer])
+                    self.h_values[layer] = relu(self.z_values[layer])
                 elif layer == self.num_of_layers - 1:
                     self.z_values[layer] = np.dot(self.weights[layer].T, self.h_values[layer - 1]) + self.biases[layer]
                     self.h_values[layer] = softmax(self.z_values[layer])
                 else:
                     self.z_values[layer] = np.dot(self.weights[layer].T, self.h_values[layer - 1]) + self.biases[layer]
-                    self.h_values[layer] = sigmoid(self.z_values[layer])
+                    self.h_values[layer] = relu(self.z_values[layer])
         max_h_val = 0
         y_hat = -1
         # print(self.h_values[self.num_of_layers - 1])
@@ -105,11 +109,11 @@ class NeuralNetwork:
                     self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.h_values[layer_id - 1].T)
 
                 elif layer_id > 0:
-                    self.dl_dz[layer_id] = np.dot(self.weights[layer_id + 1], self.dl_dz[layer_id + 1]) * dsigmoid(
+                    self.dl_dz[layer_id] = np.dot(self.weights[layer_id + 1], self.dl_dz[layer_id + 1]) * drelu(
                         self.z_values[layer_id])
                     self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], self.h_values[layer_id - 1].T)
                 else:
-                    self.dl_dz[layer_id] = np.dot(self.weights[layer_id + 1], self.dl_dz[layer_id + 1]) * dsigmoid(
+                    self.dl_dz[layer_id] = np.dot(self.weights[layer_id + 1], self.dl_dz[layer_id + 1]) * drelu(
                         self.z_values[layer_id])
                     self.dl_dw[layer_id] = np.dot(self.dl_dz[layer_id], input.T)
         self.dl_db = self.dl_dz
@@ -133,6 +137,7 @@ class NeuralNetwork:
     def train(self):
         for _ in range(self.epochs):
             # print("Running epoch number ", _)
+            # print(datetime.now())
             self.shuffle()
             loss = 0
             for input, target in zip(self.train_x, self.train_y):
@@ -208,14 +213,16 @@ def validate(data_x, data_y, epochs, learning_rate, num_of_layers, k=5, normaliz
 
 
 if __name__ == '__main__':
+    # print(datetime.now())
     train_x, train_y, test_x = receive_data(sys.argv[1], sys.argv[2], sys.argv[3])
     train_x, train_y = normalize_data(train_x, train_y)
-    print(validate(data_x=train_x, data_y=train_y, epochs=30, learning_rate=0.01, num_of_layers=1, normalize_weights=False))
-    network = NeuralNetwork(epochs=30, num_of_layers=1, learning_rate=0.01, train_x=train_x, train_y=train_y,
-                            normalize_weights=False)
+    network = NeuralNetwork(epochs=30, num_of_layers=3, learning_rate=0.01, train_x=train_x, train_y=train_y,
+                            normalize_weights=True)
     network.train()
     output_file = open('test_y', 'w')
     test_y = network.predict(test_x)
     for y in test_y:
         output_file.write(y + '\n')
     output_file.close()
+    # print(datetime.now())
+
